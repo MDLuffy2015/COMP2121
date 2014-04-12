@@ -29,6 +29,10 @@ cheese: .byte 16
 .def counter5=r22
 .def numbit=r23
 .def ledval=r21
+.def storecount=r24
+.def readcount=r25
+.def xlow = r26
+.def xhigh = r27
 ;setting up the interrupt vector
 jmp RESET
 jmp EXT_INT0 ; IRQ0 Handler for PD0
@@ -55,12 +59,16 @@ RESET: ldi temp, high(RAMEND) ; Initialize stack pointer
 out SPH, temp
 ldi temp, low(RAMEND)
 out SPL, temp
-;set up z pointer
+;set up X pointer
+ldi r26, low(cheese)
+ldi r27, high(cheese)
 ldi counter,0            
 ldi counter2,0
 ldi counter3,0
 ldi counter4,0
 ldi counter5,0
+ldi storecount, 0
+ldi readcount, 0
 ldi temp, 0
 out DDRD, temp ;set port D as input
 ldi temp,255
@@ -71,12 +79,23 @@ rjmp main
 
 ; interrupt place invoked by EXT interrupt0 when button PB0 is pressed
 EXT_INT0:                  ; saving the temp value into the stack  
+;debounce here - wait 20ms
 push temp
 in temp, SREG              ; inserting the SREG values into temp
 push temp                  ; saving the temp into stack
-ldi temp 0;
-;our code here
-
+push r26 ;push x pointer
+push r27
+ldi temp, 0;
+;store 0 in memory
+ldi r26, low(cheese) ;set up x pointer
+ldi r27, high(cheese)
+add r26, storecount ;increment x to account for stored numbers
+adc r27, 0
+ldi temp, 0x00 ;load 0 for storing
+st x, temp ;store value
+inc storecount ;increase number of stored values
+pop r27
+pop r26
 pop temp                   ; taking out temp from stack which has SREG
 out SREG, temp             ; copy the values in temp into SREG
 pop temp                   ; take the temp value from stack
@@ -86,11 +105,22 @@ reti
 
 ; interrupt place invoked by EXT interrupt1 when button PB1 is pressed
 EXT_INT1:
+;debounce here - wait 20ms
 push temp
 in temp, SREG
 push temp
-;our code here
-
+push r26 ;push x pointer
+push r27
+;store 1 in memory
+ldi r26, low(cheese) ;set up x pointer
+ldi r27, high(cheese)
+add r26, storecount ;increment x to account for stored numbers
+adc r27, 0
+ldi temp, 0xFF ;load FF for storing
+st x, temp ;store value
+inc storecount ;increase number of stored values
+pop r27
+pop r26
 pop temp
 out SREG, temp
 pop temp
