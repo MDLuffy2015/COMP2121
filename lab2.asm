@@ -1,34 +1,30 @@
-/***************************************************************************************
-   Example.3.2: This example demonstrates on how TIMER0 OVERFLOW interrupt can be used
-                to switch the speaker and motor on and off for approximately one second
-	        The STACK POINTER is needed to keep track of the return address
-                ***********************************************************************/
 /*              connections:
-		    PB0-PB3     -> LED0 - LED3
-		    PB4         -> Mot    
-		    Ain(Audio)  -> OpD
-		    ASD         -> Speaker (PIN 1)
-		    PB0(Switch) -> OpE   
+		PB0-PB3     -> LED0 - LED3
+		PB0 (input pin) -> PD0 (External Interrupt 0)
+		PB1 (input pin) -> PD1 (External Interrupt 1) 
 
 ;currently trying to store input data
 ;next step: using input data for LEDs
 
-/**************************************************************************************/
+/****************************************************************/
 
 .include "m64def.inc"
 .dseg
 .org 0x100
-cheese: .byte 16
+inputstore: .byte 16
+bitpattern: .bit 4
+
 
 .cseg
+
 .def temp=r16
 .def counter=r17
 .def counter2=r18
 .def counter3=r19
 .def counter4=r20
-.def counter5=r22
-.def numbit=r23
-.def ledval=r21
+.def counter5=r21
+.def numbit=r22
+.def ledval=r23
 .def storecount=r24
 .def readcount=r25
 .def xlow = r26
@@ -60,8 +56,8 @@ out SPH, temp
 ldi temp, low(RAMEND)
 out SPL, temp
 ;set up X pointer
-ldi r26, low(cheese)
-ldi r27, high(cheese)
+ldi r26, low(inputstore)
+ldi r27, high(inputstore)
 ldi counter,0            
 ldi counter2,0
 ldi counter3,0
@@ -72,7 +68,7 @@ ldi readcount, 0
 ldi temp, 0
 out DDRD, temp ;set port D as input
 ldi temp,255
-out DDRB,temp   ;set port D as output
+out DDRB,temp   ;set port B as output
 ldi ledval,0
 out PORTB,ledval
 rjmp main
@@ -87,8 +83,8 @@ push r26 ;push x pointer
 push r27
 ldi temp, 0;
 ;store 0 in memory
-ldi r26, low(cheese) ;set up x pointer
-ldi r27, high(cheese)
+ldi r26, low(inputstore) ;set up x pointer
+ldi r27, high(inputstore)
 add r26, storecount ;increment x to account for stored numbers
 adc r27, 0
 ldi temp, 0x00 ;load 0 for storing
@@ -112,8 +108,8 @@ push temp
 push r26 ;push x pointer
 push r27
 ;store 1 in memory
-ldi r26, low(cheese) ;set up x pointer
-ldi r27, high(cheese)
+ldi r26, low(inputstore) ;set up x pointer
+ldi r27, high(inputstore)
 add r26, storecount ;increment x to account for stored numbers
 adc r27, 0
 ldi temp, 0xFF ;load FF for storing
@@ -141,39 +137,49 @@ brne notsecond
 cpi counter2, 35         ; counting for 35
 brne secondloop          ; jumping into count 100 
 
+
 cpi ledval,0             ; compare the current ledval for zero
-breq setVal
+breq ledoffstate
 inc counter4
-cpi counter4,2
-brne outmot   
+cpi counter4,2			;checks if the led has been on for 2 seconds
+brne outled   			;if it hasnt, skip to output
 clr counter4             ; if it is zero jump to set it to FF
 ldi ledval,0             ; if the current ledval is not zero set it to 0
-inc counter5
-cpi counter5,3
-breq stopflash
-rjmp outmot              ; jump to out put value
 
-stopflash:
-		ldi temp, 0<<TOIE0		     ; =278 microseconds
-		out TIMSK, temp          ; T/C0 interrupt enable	
-		rjmp  outmot
+rjmp outled              ; jump to out put value
 
-setVal: ldi ledval,0b00001101    ; set the ledval 
+ledoffstate:
+		inc counter5
+		cpi counter5,3			;check if flashed 3 times
+		breq end3cycle
+		
+		
+setVal: ldi r26, low(bitpattern) ;set up x pointer
+		ldi r27, high(bitpattern)
+		ld ledval,X    ; set the ledval 
 
-outmot: ldi counter,0    ; clearing the counter values after counting 3597 interrupts which gives us one second
+outled: ldi counter,0    ; clearing the counter values after counting 3597 interrupts which gives us one second
         ldi counter2,0
         ldi counter3,0
+
         out PORTB,ledval ; sending the ledval to port
         rjmp exit        ; go to exit
 
 notsecond: inc counter   ; if it is not a second, increment the counter
-           rjmp exit
+        rjmp exit
 
 secondloop: inc counter3 ; counting 100 for every 35 times := 35*100 := 3500
-            cpi counter3,100 
-            brne exit
+        cpi counter3,100 
+        brne exit
 	    inc counter2
-	    ldi counter3,0                  
+	    ldi counter3,0
+		rjmp exit
+		
+end3cycle:
+			;check if there is enough data for a new bit pattern
+		ldi ledval,0	
+		rjmp  outled
+		
 exit: 
 pop r24                  ; Epilogue starts;
 out SREG, r24            ; Restore all conflict registers from the stack.
